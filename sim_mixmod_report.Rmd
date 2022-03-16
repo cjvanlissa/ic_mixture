@@ -8,6 +8,9 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 run_everything = FALSE
+```
+
+```{r}
 library(tidyLPA)
 library(MplusAutomation)
 library(sn)
@@ -17,7 +20,6 @@ reps <- 100
 maxK <- 5
 d = 2
 ```
-
 
 ```{r sim, eval=run_everything}
 

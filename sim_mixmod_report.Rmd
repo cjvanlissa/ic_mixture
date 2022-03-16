@@ -1,0 +1,162 @@
+---
+title: "Determining the appropriate number of classes"
+author: "Caspar J. van Lissa"
+date: "3/13/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+run_everything = FALSE
+library(tidyLPA)
+library(MplusAutomation)
+library(sn)
+library(DT)
+N = 200
+reps <- 100
+maxK <- 5
+d = 2
+```
+
+
+```{r sim, eval=run_everything}
+
+
+out_n <- replicate(reps, {
+  res <- createMixtures(classes = 1:maxK, filename_stem = "tmp", rdata = data.frame(x = rnorm(N)), run = 1L)
+  mixtureSummaryTable(res)
+}, simplify = FALSE)
+
+out_l <- replicate(reps, {
+  res <- createMixtures(classes = 1:maxK, filename_stem = "tmp",
+                        rdata = data.frame(x = as.integer(cut(rnorm(N), 5))),
+                        run = 1L)
+  mixtureSummaryTable(res)
+}, simplify = FALSE)
+
+out_sn <- replicate(reps, {
+  res <- createMixtures(classes = 1:maxK, filename_stem = "tmp",
+                        rdata = data.frame(x = sn::rsn(N, alpha = 2)),
+                        run = 1L)
+  mixtureSummaryTable(res)
+}, simplify = FALSE)
+
+saveRDS(list(out_n, out_l, out_sn), "class1.RData")
+# type1 <- data.frame(Distribution = c("Normal", "Likert", "SkewN"), t(sapply(list(tab_n, tab_l, tab_sn), eval_fun)))
+
+
+# 2 class -----------------------------------------------------------------
+
+out_n2 <- replicate(reps, {
+  res <- createMixtures(classes = 1:maxK, filename_stem = "tmp",
+                        rdata = data.frame(x = c(rnorm(N/2),
+                                                 rnorm(N/2, mean = d))), run = 1L)
+  mixtureSummaryTable(res)
+}, simplify = FALSE)
+
+out_l2 <- replicate(reps, {
+  res <- createMixtures(classes = 1:maxK, filename_stem = "tmp",
+                        rdata = data.frame(
+                          x = as.integer(cut(c(rnorm(N/2), rnorm(N/2, mean = d)), 5))),
+                        run = 1L)
+  mixtureSummaryTable(res)
+}, simplify = FALSE)
+
+out_sn2 <- replicate(reps, {
+  res <- createMixtures(classes = 1:maxK, filename_stem = "tmp",
+                        rdata = data.frame(x = c(sn::rsn(N/2, alpha = 2),
+                                                 sn::rsn(N/2, xi = d, alpha = 2))),
+                        run = 1L)
+  mixtureSummaryTable(res)
+}, simplify = FALSE)
+
+saveRDS(list(out_n2, out_l2, out_sn2), "class2.RData")
+
+```
+
+
+```{r functions}
+correct_fun <- function(tab, class){
+  out <- colMeans(sapply(tab[c("AIC", "BIC", "aBIC")], function(c){
+    tapply(c, tab$Rep, which.min)
+  }) == class)
+  tab <- tab[-seq(1, reps*maxK, by = 5), ]
+  if(class == 1){
+    out <- c(out, colMeans(
+      apply(tab[c("T11_VLMR_PValue", "T11_LMR_PValue", "BLRT_PValue")] < .05, 2, function(c){tapply(c, tab$Rep, function(x){
+        all(!x)
+      })}), na.rm = TRUE))
+  } else {
+    out <- c(out, colMeans(
+      apply(tab[c("T11_VLMR_PValue", "T11_LMR_PValue", "BLRT_PValue")] < .05, 2, function(c){tapply(c, tab$Rep, function(x){
+        x[(class-1)] & all(!x[-(class-1)])
+      })}), na.rm = TRUE))
+  }
+  out
+}
+
+overextract_fun <- function(tab, class){
+  out <- colMeans(sapply(tab[c("AIC", "BIC", "aBIC")], function(c){
+    tapply(c, tab$Rep, which.min)
+  }) > class)
+  if(class == 1){
+    tab <- tab[-seq(1, reps*maxK, by = 5), ]
+    out <- c(out, colMeans(apply(tab[c("T11_VLMR_PValue", "T11_LMR_PValue", "BLRT_PValue")] < .05, 2, function(c){tapply(c, tab$Rep, any)}), na.rm = TRUE))
+  } else {
+    out <- c(out, colMeans(
+      apply(tab[c("T11_VLMR_PValue", "T11_LMR_PValue", "BLRT_PValue")] < .05, 2, function(c){tapply(c, tab$Rep, function(x){
+        any(x[-c(1:(class-1))])
+      })}), na.rm = TRUE))
+  }
+  out
+}
+
+```
+
+```{r output}
+c1 <- readRDS("C:/Git_Repositories/srma_fearlearning/class1.RData")
+c2 <- readRDS("C:/Git_Repositories/srma_fearlearning/class2.RData")
+res1 <- lapply(c1, function(out){
+  cbind(do.call(rbind, out), Rep = rep(1:reps, each = maxK))
+})
+res2 <- lapply(c2, function(out){
+  cbind(do.call(rbind, out), Rep = rep(1:reps, each = maxK))
+})
+# tab_n <- 
+# tab_l <- cbind(do.call(rbind, out_l), Rep = rep(1:reps, each = maxK))
+# tab_sn <- cbind(do.call(rbind, out_sn), Rep = rep(1:reps, each = maxK))
+# tab_n2 <- cbind(do.call(rbind, out_n2), Rep = rep(1:reps, each = maxK))
+# tab_l2 <- cbind(do.call(rbind, out_l2), Rep = rep(1:reps, each = maxK))
+# tab_sn2 <- cbind(do.call(rbind, out_sn2), Rep = rep(1:reps, each = maxK))
+correct <- data.frame(t(sapply(res1, correct_fun, class = 1)))
+correct <- rbind(correct,
+                 data.frame(t(sapply(res2, correct_fun, class = 2))))
+correct$True_class <- rep(1:2, each = 3)
+correct$Distribution = rep(c("Normal", "Likert", "SkewN"), 2)
+
+overextract <- data.frame(t(sapply(res1, overextract_fun, class = 1)))
+overextract <- rbind(overextract,
+                 data.frame(t(sapply(res2, overextract_fun, class = 2))))
+overextract$True_class <- rep(1:2, each = 3)
+overextract$Distribution = rep(c("Normal", "Likert", "SkewN"), 2)
+
+```
+
+## Correctly detected number of classes
+
+```{r tabcorrect}
+library(DT)
+names(correct) <- gsub("(T\\d+|PValue|_)", "", names(correct))
+datatable(correct, rownames = FALSE) |>
+  formatRound(columns=names(correct)[1:6], digits=2)
+```
+
+## Overextracted
+
+```{r taboverextract}
+names(overextract) <- gsub("(T\\d+|PValue|_)", "", names(overextract))
+datatable(overextract, rownames = FALSE) |>
+  formatRound(columns=names(overextract)[1:6], digits=2)
+```
+
+

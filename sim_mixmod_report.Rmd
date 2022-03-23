@@ -19,6 +19,15 @@ N = 200
 reps <- 100
 maxK <- 5
 d = 2
+sumtab <- function(x){
+  out <- mixtureSummaryTable(x)
+  df <- out$Classes*2
+  ll <- sapply(x, function(i){i$results$summaries$LL})
+  caic <- -2 * ll + N*(N+df) / (N-df-2)
+  aicc <- -2 * ll + N*(df+1) / (df-2)
+  data.frame(out, df = df, ll = ll, caic = caic, aicc = aicc)
+}
+
 ```
 
 ```{r sim, eval=run_everything}
@@ -113,6 +122,19 @@ overextract_fun <- function(tab, class){
   out
 }
 
+which_class <- function(x){
+  ics <- apply(x[c("AIC", "BIC", "aBIC")], 2, which.min)
+  pvals <- x[-1, c("T11_VLMR_PValue", "T11_LMR_PValue", "BLRT_PValue")] < .05
+  pvals <- apply(pvals, 2, function(i){
+    i[is.na(i)] <- FALSE # Set missings to false;
+                         # would not select a non-converged solution
+    if(all(!i)){
+      1 # If all p-values non-sig, choose 1 class
+    } else {
+      max(which(i))+1 # Else, choose highest number of classes with sig p-value
+    }})
+  c(ics, pvals)
+}
 ```
 
 ```{r output}
@@ -124,6 +146,10 @@ res1 <- lapply(c1, function(out){
 res2 <- lapply(c2, function(out){
   cbind(do.call(rbind, out), Rep = rep(1:reps, each = maxK))
 })
+
+
+table(ordered(truees > .1, levels = c("FALSE", "TRUE")), ordered(var > 3, levels = c("FALSE", "TRUE")))
+ 
 # tab_n <- 
 # tab_l <- cbind(do.call(rbind, out_l), Rep = rep(1:reps, each = maxK))
 # tab_sn <- cbind(do.call(rbind, out_sn), Rep = rep(1:reps, each = maxK))

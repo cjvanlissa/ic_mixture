@@ -10,3 +10,6 @@
 *.log
 *.tex
 .Rproj.user
+*.inp
+*.out
+*.dat

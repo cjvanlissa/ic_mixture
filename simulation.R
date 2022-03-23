@@ -14,7 +14,7 @@ library(sn)
 hyper_parameters <- list(
   reps = 1:100,
   es = c(1, 2.75, 3.88), # Corresponding to entropy of .24, .7 and .9 for high N
-  n = c(40, 100, 300),
+  N = c(40, 100, 300),
   maxK = 3,
   dist = c("norm", "sn", "likert")
 )
@@ -39,14 +39,14 @@ pb <- txtProgressBar(min = 0, max = nrow(summarydata), style = 3)
 opts <- list(progress = function(n) setTxtProgressBar(pb, n))
 
 # run simulation
-tab <- foreach(rownum = 1:nrow(summarydata), .options.snow = opts, .packages = c("bain", "mvtnorm"), .combine = rbind) %dopar% {
+tab <- foreach(rownum = 1:nrow(summarydata), .options.snow = opts, .packages = c("MplusAutomation", "bain", "mvtnorm"), .combine = rbind) %dopar% {
   # Set seed
   attach(summarydata[rownum, ])
   set.seed(seed)
   filnm <- paste0("tmp", Sys.getpid())
 
   # create dataframe for each group
-  df <- data.frame(x = switch(dist,
+  dataframe <- data.frame(x = switch(dist,
                 norm = c(rnorm(floor(N/2)), rnorm(ceiling(N/2), mean = es)),
                 sn = c(sn::rsn(floor(N/2), alpha = 2),
                        sn::rsn(ceiling(N/2), xi = es, alpha = 2)),
@@ -55,12 +55,12 @@ tab <- foreach(rownum = 1:nrow(summarydata), .options.snow = opts, .packages = c
 
   res <- createMixtures(classes = 1:maxK,
                         filename_stem = filnm,
-                        rdata = df, run = 1L)
+                        rdata = dataframe, run = 1L)
   out <- mixtureSummaryTable(res)
-  df <- out$Classes*2
+  df <- out$Classes*2 # Je schreef: Hier komt nog de vector classificatie probabilities bij; dit is K-1 (bij K classen). NB Hier klopt 2*K nu eerst wel volgens mij en dan staat het nu goed, maar wilde het wel melden...
   ll <- sapply(res, function(i){i$results$summaries$LL})
   caic <- -2 * ll + N*(N+df) / (N-df-2)
-  aicc <- -2 * ll + N*(df+1) / ((df-2)+.001)
+  aicc <- -2 * ll + N*(df+1) / (N-df-2) # It was: ((df-2)+.001) # Why do you use .001 and why this expression?
   out <- data.frame(rownum = rownum, out[c("Classes", "AIC", "BIC", "aBIC", "Entropy", "T11_VLMR_PValue", 
                    "T11_LMR_PValue", "BLRT_PValue", "min_N", "max_N", "min_prob", 
                    "max_prob")

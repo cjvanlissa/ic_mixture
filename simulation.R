@@ -6,13 +6,15 @@ cat("\014")
 library(tidyLPA)
 library(MplusAutomation)
 library(sn)
+library(doSNOW)
+library(bain)
 
 # Load simulation functions from source -----------------------------------
 # source('functions.R')
 
 # set conditions for simulation
 hyper_parameters <- list(
-  reps = 1:2,
+  reps = 1:100,
   es = c(1, 2.75, 3.88), # Corresponding to entropy of .24, .7 and .9 for high N
   N = c(40, 100, 300),
   maxK = 3,
@@ -28,9 +30,13 @@ summarydata$rownum <- 1:nrow(summarydata)
 saveRDS(summarydata, file = "summarydata.RData")
 # summarydata<-readRDS("summarydata.RData")
 
+if(dir.exists("results")){
+  unlink("results", recursive = T)
+}
+dir.create("results")
+
 # prepare parallel processing
-library(doSNOW)
-nclust <- parallel::detectCores() 
+nclust <- parallel::detectCores()
 cl <- makeCluster(nclust) 
 registerDoSNOW(cl) 
 
@@ -39,7 +45,7 @@ pb <- txtProgressBar(min = 0, max = nrow(summarydata), style = 3)
 opts <- list(progress = function(n) setTxtProgressBar(pb, n))
 
 # run simulation
-tab <- foreach(rownum = 1:nrow(summarydata), .options.snow = opts, .packages = c("MplusAutomation", "bain", "mvtnorm"), .combine = rbind) %dopar% {
+tab <- foreach(rownum = 1:nrow(summarydata), .options.snow = opts, .packages = c("MplusAutomation", "bain"), .combine = rbind) %dopar% {
   # Set seed
   attach(summarydata[rownum, ])
   set.seed(seed)
@@ -70,7 +76,31 @@ tab <- foreach(rownum = 1:nrow(summarydata), .options.snow = opts, .packages = c
 
 #Close cluster
 stopCluster(cl)
-
-
-# End of simulation -------------------------------------------------------
 stop("End of simulation")
+
+
+
+# Read files --------------------------------------------------------------
+
+
+library(data.table)
+
+res <- as.data.table(readRDS(list.files(pattern = "summarydata")))
+
+vars <- c("rownum", "Classes", "AIC", "BIC", "aBIC", "Entropy", "T11_VLMR_PValue", 
+  "T11_LMR_PValue", "BLRT_PValue", "min_N", "max_N", "min_prob", 
+  "max_prob", "df", "ll", "caic", "aicc")
+
+f <- list.files("results", full.names = TRUE)
+tab <- lapply(f, fread, header = F)
+tab <- rbindlist(tab)
+setorderv(tab, cols = c("V1", "V2"), order=1L, na.last=FALSE)
+if(!(tab$V1[1] == 1 & tail(tab$V1, 1) == nrow(res) & length(unique(tab$V1)) == nrow(res))){
+  stop()
+}
+names(tab) <- vars
+tab[, "rownum" := NULL]
+res <- cbind(res, tab)
+
+fwrite(res, paste0("sim_results_", Sys.Date(), ".csv"))
+saveRDS(res, paste0("sim_results_", Sys.Date(), ".RData"))

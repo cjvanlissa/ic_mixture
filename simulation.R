@@ -96,7 +96,7 @@ res <- as.data.table(readRDS(list.files(pattern = "summarydata")))
 
 vars <- c("rownum", "Classes", "AIC", "BIC", "aBIC", "Entropy", "T11_VLMR_PValue", 
   "T11_LMR_PValue", "BLRT_PValue", "min_N", "max_N", "min_prob", 
-  "max_prob", "df", "ll", "caic", "aicc")
+  "max_prob", "df", "ll", "caic", "aicc", paste0("N", 1:maxK))
 
 f <- list.files("results", full.names = TRUE)
 tab <- lapply(f, fread, header = F)
@@ -107,8 +107,8 @@ if(!(tab$V1[1] == 1 & tail(tab$V1, 1) == nrow(res) & length(unique(tab$V1)) == n
   stop()
 }
 names(tab) <- vars
-tab[, "rownum" := NULL]
-res <- cbind(res, tab)
+#tab[, "rownum" := NULL]
+merged <- merge(res, tab, by = "rownum")
 
-fwrite(res, paste0("sim_results_", Sys.Date(), ".csv"))
-saveRDS(res, paste0("sim_results_", Sys.Date(), ".RData"))
+fwrite(merged, paste0("sim_results_", Sys.Date(), ".csv"))
+saveRDS(merged, paste0("sim_results_", Sys.Date(), ".RData"))

@@ -64,12 +64,18 @@ tab <- foreach(rownum = 1:nrow(summarydata), .options.snow = opts, .packages = c
                         rdata = dat, run = 1L)
   out <- mixtureSummaryTable(res)
   df <- out$Classes*2 #
+  tmp <- rep(NA, maxK)
   ll <- sapply(res, function(i){i$results$summaries$LL})
+  ns <- t(sapply(res, function(i){
+    tmp[1:length(i$results$class_counts$posteriorProb$count)] <- i$results$class_counts$posteriorProb$count
+    tmp
+    }))
+  
   caic <- -2 * ll + N*(N+df) / (N-df-2)
   aicc <- -2 * ll + N*(df+1) / (N-df-2) # CJ: Aaah ik had een copy-paste fout gemaakt uit jouw email, waardoor er stond / (df-2). Dat werkte niet
   out <- data.frame(rownum = rownum, out[c("Classes", "AIC", "BIC", "aBIC", "Entropy", "T11_VLMR_PValue", 
                    "T11_LMR_PValue", "BLRT_PValue", "min_N", "max_N", "min_prob", 
-                   "max_prob")], df = df, ll = ll, caic = caic, aicc = aicc)
+                   "max_prob")], df = df, ll = ll, caic = caic, aicc = aicc, ns)
   write.table(x = out, file = sprintf("./results/results%d.txt" , Sys.getpid()), 
               sep = "\t", append = TRUE, row.names = FALSE, col.names = FALSE)
 }
@@ -78,7 +84,8 @@ tab <- foreach(rownum = 1:nrow(summarydata), .options.snow = opts, .packages = c
 stopCluster(cl)
 stop("End of simulation")
 
-
+f <- c(list.files(pattern = "^tmp"), list.files(pattern = "^data_tmp"))
+file.remove(f)
 
 # Read files --------------------------------------------------------------
 
@@ -96,6 +103,7 @@ tab <- lapply(f, fread, header = F)
 tab <- rbindlist(tab)
 setorderv(tab, cols = c("V1", "V2"), order=1L, na.last=FALSE)
 if(!(tab$V1[1] == 1 & tail(tab$V1, 1) == nrow(res) & length(unique(tab$V1)) == nrow(res))){
+  c(1:nrow(res))[!c(1:nrow(res)) %in% unique(tab$V1)]
   stop()
 }
 names(tab) <- vars
